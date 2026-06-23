@@ -12,9 +12,9 @@ Understand First solves this — it makes the AI lay out its understanding for y
 
 ## Demo
 
-![Understand First Demo](zh-CN/demo.png)
+![Understand First Demo](demo.png)
 
-![Understand First Demo 2](zh-CN/demo-2.png)
+![Understand First Demo 2](demo-2.png)
 
 ## Installation
 
