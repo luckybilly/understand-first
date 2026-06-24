@@ -20,7 +20,22 @@ Understand First solves this — it makes the AI lay out its understanding for y
 
 ### Global Install (works across all projects)
 
-Copy the install prompt from [hooks/install-prompt.md](hooks/install-prompt.md) into Claude Code. The AI will handle everything automatically — no shell, no curl, works on any platform.
+One-line command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/luckybilly/understand-first/main/hooks/install.sh | sh
+```
+
+Or copy this prompt into Claude Code:
+
+```text
+Install Understand First globally for me.
+
+Please run this command:
+curl -fsSL https://raw.githubusercontent.com/luckybilly/understand-first/main/hooks/install.sh | sh
+
+Let me know the result when done.
+```
 
 ### Install for Current Project
 
