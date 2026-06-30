@@ -1,113 +1,113 @@
-# Understand First — Install
+# Understand First — 安装
 
-Install the "Understand First" hook into the current Claude Code environment — cross-platform (Windows / macOS / Linux).
+将 "Understand First" hook 安装到当前 Claude Code 环境中——跨平台（Windows / macOS / Linux）。
 
-This is the agent-driven installer. Its installed result is equivalent to `hooks/install.sh`: the same enforcement preamble + full protocol injected as `additionalContext` on every user input. Use it where `curl | sh` cannot run (notably native Windows), or whenever an agent-driven install is preferred.
+这是 agent 驱动的安装器，安装结果与 `hooks/install.sh` 等价：相同的强制前缀 + 完整协议作为 `additionalContext` 在每次用户输入时注入。当 `curl | sh` 无法运行时（尤其是原生 Windows），或希望由 agent 驱动安装时使用。
 
-## Goal
+## 目标
 
-After installation, every time the user submits a prompt, Claude Code must display its understanding of the request BEFORE taking any action. This is achieved by registering a `UserPromptSubmit` hook that injects the protocol as `additionalContext`.
+安装后，每次用户提交提示词时，Claude Code 必须在执行任何操作之前先展示它对请求的理解。通过注册一个 `UserPromptSubmit` hook 来实现，该 hook 将协议作为 `additionalContext` 注入。
 
-## Operating Rules
+## 操作规则
 
-- Do NOT use `sudo`.
-- Do NOT overwrite existing user files without explicit permission — append or merge instead.
-- All operations must be idempotent — running the install twice must equal running it once.
-- Back up any file before modifying it (save as `<filename>.bak`), then write via temp-file + atomic rename (never overwrite in place — an interrupted write corrupts the file).
-- Resolve every path to an **absolute** path before writing it anywhere (especially into `settings.json`). Never write `~`, `$HOME`, or `%USERPROFILE%` placeholders into the registered command — Claude Code does not expand them reliably across platforms.
-- Serialize JSON only through a JSON library (`json.dumps` / `ConvertTo-Json` / `jq`). **Never hand-build JSON** from the protocol text — it contains quotes, newlines, and unicode that will break naive string concatenation.
-- Prefer Python for the hook (cross-platform, guaranteed-correct JSON via `json.dumps`, and `Path.home()` resolves the profile dir on every OS). Fall back to PowerShell (Windows) or POSIX `sh` + `jq` (Unix) only when no Python is available.
+- 不要使用 `sudo`。
+- 不要未经明确许可就覆盖用户已有文件——改为追加或合并。
+- 所有操作必须幂等——安装两次和安装一次的结果应相同。
+- 修改文件前先备份（保存为 `<文件名>.bak`），并通过临时文件 + 原子 rename 写入（不要原地覆盖——写入中断会损坏文件）。
+- 写入任何位置前（尤其是写入 `settings.json`）都把路径解析为**绝对路径**。**绝不**把 `~`、`$HOME`、`%USERPROFILE%` 占位符写进注册命令——Claude Code 在各平台上对这些占位符的展开并不可靠。
+- JSON 只能通过 JSON 库序列化（`json.dumps` / `ConvertTo-Json` / `jq`）。**绝不手搓 JSON**——协议正文含引号、换行、unicode，会打断朴素的字符串拼接。
+- hook 优先用 Python（跨平台、`json.dumps` 保证 JSON 正确、`Path.home()` 在所有系统上解析用户目录）。仅当无 Python 时才回退到 PowerShell（Windows）或 POSIX `sh` + `jq`（Unix）。
 
-## Success Criteria
+## 成功标准
 
-All of the following must be true after installation:
+安装后以下条件必须全部满足：
 
-1. `~/.claude/hooks/understand-first-hook.py` exists, alongside `~/.claude/hooks/understand-first-protocol.txt` (the raw preamble + protocol, UTF-8).
-2. Executing the **registered command** outputs valid JSON to stdout:
+1. `~/.claude/hooks/understand-first-hook.py` 存在，且同目录有 `~/.claude/hooks/understand-first-protocol.txt`（原始前缀 + 协议，UTF-8）。
+2. 执行**注册的命令**会向 stdout 输出有效 JSON：
    ```json
-   {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<preamble + protocol>"}}
+   {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<前缀 + 协议>"}}
    ```
-3. `additionalContext` starts with the enforcement preamble and contains the full protocol (non-empty, contains `Understand First`).
-4. `~/.claude/settings.json` has a `UserPromptSubmit` entry whose `command` invokes the hook by absolute path.
-5. `~/.claude/CLAUDE.md` contains the Understand First anchor line.
+3. `additionalContext` 以强制前缀开头，并包含完整协议（非空，且包含 `Understand First`）。
+4. `~/.claude/settings.json` 有一个 `UserPromptSubmit` 条目，其 `command` 以绝对路径调用 hook。
+5. `~/.claude/CLAUDE.md` 包含 Understand First 锚点行。
 
-## Steps
+## 步骤
 
-### 1. Detect platform & interpreter
+### 1. 检测平台与解释器
 
-- Determine OS (Windows / macOS / Linux).
-- Probe for a Python interpreter in this order; record the **first that runs** and prints a version: `py -3`, then `python3`, then `python`. Store the invocation prefix (e.g. `py -3`, `python3`, `python`) as `PY`.
-- Resolve the hooks directory: `~/.claude/hooks` (use the Python `Path.home()` equivalent — do NOT assume `~` in strings).
-- If **no Python at all** is found: use the **Fallback (no Python)** path below. If the fallback runtime is also unavailable (no PowerShell on Windows, no `jq` on Unix), STOP and ask the user to install Python 3.
+- 判断操作系统（Windows / macOS / Linux）。
+- 按以下顺序探测 Python 解释器，记录**第一个能运行并输出版本**的：`py -3`，然后 `python3`，然后 `python`。把调用前缀（如 `py -3`、`python3`、`python`）记为 `PY`。
+- 解析 hooks 目录：`~/.claude/hooks`（用 Python 的 `Path.home()` 等价方式——不要假设字符串里的 `~`）。
+- 若**完全没有 Python**：走下方的"兜底（无 Python）"路径。若兜底运行时也不可用（Windows 无 PowerShell、Unix 无 `jq`），停下并请用户安装 Python 3。
 
-### 2. Fetch the protocol
+### 2. 获取协议
 
-Resolve the protocol text in this order (mirrors `install.sh`):
+按以下顺序解析协议正文（与 `install.sh` 对齐）：
 
-1. **Offline first** — if a file `./CLAUDE.md` in the current working directory exists and its first line is exactly `# Understand First`, read it locally. No network needed. (This only applies when running inside a clone of this repo; the H1 check prevents injecting some other project's CLAUDE.md.)
-2. Otherwise WebFetch: `https://raw.githubusercontent.com/luckybilly/understand-first/main/CLAUDE.md`
-3. If the fetch fails, ask the user to paste the protocol content manually. Do not proceed with empty protocol text.
+1. **优先离线**——若当前工作目录下存在 `./CLAUDE.md` 且其首行恰为 `# Understand First`，则本地读取，免网络。（仅在本仓库克隆内运行时适用；H1 检查可防止注入其他项目的 CLAUDE.md。）
+2. 否则用 WebFetch：`https://raw.githubusercontent.com/luckybilly/understand-first/main/CLAUDE.md`
+3. 若获取失败，请用户手动粘贴协议内容。不要用空协议正文继续。
 
-### 3. Create the hook (two self-contained files)
+### 3. 创建 hook（两个自包含文件）
 
-Create `~/.claude/hooks/` if needed, then write **two** files:
+按需创建 `~/.claude/hooks/`，然后写入**两个**文件：
 
-**`understand-first-protocol.txt`** — the raw injected context, UTF-8, no escaping:
+**`understand-first-protocol.txt`**——原始注入内容，UTF-8，无需转义：
 
 ```
-[IMPORTANT — Understand First Protocol Enforcement]
+[重要 · Understand First 协议强制执行]
 
-You MUST follow this protocol on EVERY user input. No exceptions. Skipping the understanding step is a protocol violation.
+每轮用户输入都必须先展示理解、再执行——无例外。跳过理解步骤即视为协议违规。
 ```
 
-…followed by a blank line, then the full protocol text fetched in step 2. So the file content equals `PREAMBLE + "\n\n" + PROTOCOL`. Do **not** apply the `'` → `ʼ` apostrophe substitution — that was a workaround for a bash 3.2 heredoc bug that does not apply to a Python hook; keep the protocol text verbatim.
+……后接一个空行，再接第 2 步获取的完整协议正文。即文件内容 = `前缀 + "\n\n" + 协议`。**不要**做 `'` → `ʼ` 撇号替换——那是 bash 3.2 heredoc bug 的权宜之计，对 Python hook 不适用；协议正文保持原样。
 
-**`understand-first-hook.py`** — use the reference implementation under "Reference Implementation" below verbatim. It reads the sibling `.txt` and emits it via `json.dumps`, so all escaping is always correct.
+**`understand-first-hook.py`**——逐字使用下方"参考实现"中的版本。它读取同目录 `.txt` 并通过 `json.dumps` 输出，转义永远正确。
 
-On Unix, `chmod +x` the hook (optional — the registered command invokes the interpreter explicitly).
+Unix 上对 hook 执行 `chmod +x`（可选——注册命令已显式调用解释器）。
 
-### 4. Register the hook in settings.json
+### 4. 在 settings.json 注册 hook
 
-Run the **Reference merge script** below (deterministic: precise idempotency check, `.bak` backup, atomic rename). Set its `cmd` from the detected interpreter and the absolute hook path:
+运行下方的**参考合并脚本**（确定性：精确幂等检查、`.bak` 备份、原子 rename）。用探测到的解释器与 hook 绝对路径设置其 `cmd`：
 
-- `cmd = '<PY> "<ABSOLUTE_PATH>/understand-first-hook.py"'`
-- On Windows, use **forward slashes** in the absolute path (Python accepts them) so the JSON needs no backslash escaping.
-- An entry counts as "already installed" only when its `matcher` is `""` or `null` **and** one of its inner `hooks[]` has a `command` containing `understand-first`. If already present, make no changes.
+- `cmd = '<PY> "<绝对路径>/understand-first-hook.py"'`
+- Windows 上，绝对路径用**正斜杠**（Python 接受），这样 JSON 无需反斜杠转义。
+- 仅当某条目的 `matcher` 为 `""` 或 `null` **且**其内层 `hooks[]` 中某条 `command` 含 `understand-first` 时，才算"已安装"。若已存在，不做任何改动。
 
-If `settings.json` does not exist, create it as `{}`.
+若 `settings.json` 不存在，创建为 `{}`。
 
-### 5. Write anchor to CLAUDE.md
+### 5. 写入锚点到 CLAUDE.md
 
-Check `~/.claude/CLAUDE.md` for the string `Understand First`. If absent:
-- File exists → append the anchor line.
-- File missing → create it with the anchor line.
+检查 `~/.claude/CLAUDE.md` 是否含字符串 `Understand First`。若无：
+- 文件已存在 → 追加锚点行。
+- 文件不存在 → 创建文件并写入锚点行。
 
-Anchor line:
+锚点行：
 ```
 Always follow the "Understand First" protocol injected by the UserPromptSubmit hook — show your understanding before executing, every turn, without exception.
 ```
 
-## Verification (must actually execute — not just inspect files)
+## 验证（必须实际执行——不能只看文件）
 
-1. Run the **exact** `command` registered in step 4, capture stdout, and `json.loads` it. Assert `hookSpecificOutput.additionalContext` is non-empty and contains `Understand First`. **If the output is not valid JSON or `additionalContext` is empty, this is a hard failure — do NOT declare success.** Report the raw output and fix it before finishing.
-2. Re-read `settings.json` and confirm the `UserPromptSubmit` entry exists with the matching command.
-3. Confirm `~/.claude/CLAUDE.md` contains the anchor line.
+1. 运行第 4 步注册的**确切** `command`，捕获 stdout，并 `json.loads` 解析。断言 `hookSpecificOutput.additionalContext` 非空且含 `Understand First`。**若输出不是有效 JSON 或 `additionalContext` 为空，这是硬失败——不得宣称成功。** 报告原始输出并先修复再完成。
+2. 重新读取 `settings.json`，确认 `UserPromptSubmit` 条目存在且 command 匹配。
+3. 确认 `~/.claude/CLAUDE.md` 含锚点行。
 
-If anything fails, report the error and ask what to do.
+若有问题，报告错误并问我怎么处理。
 
-## Final Response Format
+## 完成汇报格式
 
-Report:
-- Platform detected (OS + available runtimes, + chosen Python invocation)
-- Hook language/runtime chosen
-- Paths of the two hook files
-- The exact `command` registered in settings.json
-- Each success criterion: passed / failed
-- Reminder to restart Claude Code to activate
+汇报：
+- 检测到的平台（操作系统 + 可用运行时 + 选定的 Python 调用方式）
+- 选用的 hook 语言/运行时
+- 两个 hook 文件的路径
+- 注册到 settings.json 的确切 `command`
+- 每条成功标准：通过 / 未通过
+- 提醒需要重启 Claude Code 才能生效
 
-## Reference Implementation
+## 参考实现
 
-### `understand-first-hook.py` (write this verbatim)
+### `understand-first-hook.py`（逐字写入）
 
 ```python
 #!/usr/bin/env python3
@@ -142,9 +142,9 @@ payload = {
 sys.stdout.write(json.dumps(payload, ensure_ascii=False))
 ```
 
-### Merge script for settings.json (run with the detected Python)
+### settings.json 合并脚本（用探测到的 Python 运行）
 
-Substitute `<PY>` and the absolute hook path. It is idempotent, backs up to `.bak`, and writes atomically.
+替换其中的 `<PY>` 与 hook 绝对路径。幂等、备份到 `.bak`、原子写入。
 
 ```python
 import json
@@ -153,9 +153,9 @@ import shutil
 
 settings = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
 hook_py = os.path.join(os.path.expanduser("~"), ".claude", "hooks", "understand-first-hook.py")
-# cmd uses forward slashes on Windows to avoid JSON backslash escaping:
+# cmd 在 Windows 上用正斜杠，避免 JSON 反斜杠转义：
 hook_py_fwd = hook_py.replace("\\", "/")
-cmd = '<PY> "%s"' % hook_py_fwd   # e.g. 'python3 "..."' or 'python "..."' or 'py -3 "..."'
+cmd = '<PY> "%s"' % hook_py_fwd   # 例如 'python3 "..."' 或 'python "..."' 或 'py -3 "..."'
 
 os.makedirs(os.path.dirname(settings), exist_ok=True)
 if not os.path.isfile(settings):
@@ -200,11 +200,11 @@ else:
     print("ADDED")
 ```
 
-## Fallback (no Python)
+## 兜底（无 Python）
 
-Only when step 1 finds no Python. The protocol text is still stored in `understand-first-protocol.txt` (same content, same dir); only the hook and its command differ.
+仅当第 1 步找不到 Python 时使用。协议正文仍存于 `understand-first-protocol.txt`（同目录、同内容）；仅 hook 与其 command 不同。
 
-**Windows — PowerShell** (`understand-first-hook.ps1`):
+**Windows — PowerShell**（`understand-first-hook.ps1`）：
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -214,13 +214,13 @@ $protocol = Get-Content -Raw (Join-Path $here 'understand-first-protocol.txt')
     ConvertTo-Json -Compress -Depth 5
 ```
 
-Registered command (absolute path, note `-ExecutionPolicy Bypass` to sidestep policy blocks):
+注册命令（绝对路径，注意 `-ExecutionPolicy Bypass` 以绕过执行策略拦截）：
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_PATH>/understand-first-hook.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "<绝对路径>/understand-first-hook.ps1"
 ```
 
-**Unix — POSIX sh + jq** (`understand-first-hook.sh`):
+**Unix — POSIX sh + jq**（`understand-first-hook.sh`）：
 
 ```sh
 #!/bin/sh
@@ -229,8 +229,8 @@ exec jq -Rs '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalCon
   "$DIR/understand-first-protocol.txt"
 ```
 
-Registered command: `sh "<ABSOLUTE_PATH>/understand-first-hook.sh"` (requires `jq` on PATH).
+注册命令：`sh "<绝对路径>/understand-first-hook.sh"`（需 PATH 上有 `jq`）。
 
-If neither Python nor the applicable fallback runtime is available, stop and ask the user to install Python 3 — do not attempt a hand-built JSON hook.
+若 Python 与对应兜底运行时都不可用，停下并请用户安装 Python 3——不要尝试手搓 JSON hook。
 
-## EXECUTE NOW
+## 立即执行
